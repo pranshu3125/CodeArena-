@@ -1,8 +1,6 @@
 "use client";
-
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/primitives/Card";
 import { NeonText } from "@/components/primitives/NeonText";
@@ -20,8 +18,6 @@ interface Row {
 }
 
 export default function LeaderboardPage() {
-  const router = useRouter();
-
   const { data, isLoading } = useQuery({
     queryKey: ["leaderboard"],
     queryFn: async () => (await api.get<Row[]>("/leaderboard")).data,
@@ -29,40 +25,24 @@ export default function LeaderboardPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <div className="mb-4 flex items-center gap-4">
-        <button
-          onClick={() => router.back()}
-          className="rounded-lg border border-[var(--color-border)] px-3 py-2 font-mono text-[11px] tracking-[0.2em] text-[var(--color-text-3)] transition hover:border-[var(--color-neon-pink)] hover:text-[var(--color-text-1)]"
-        >
-          ←
-        </button>
-
-        <div className="font-mono text-[11px] tracking-[0.3em] text-[var(--color-neon-pink)]">
-            THE LEADERBOARD
-        </div>
+      <div className="mb-2 font-mono text-[11px] tracking-[0.3em] text-[var(--color-neon-pink)]">
+        // THE LEADERBOARD
       </div>
-
       <NeonText as="h1" className="mb-10 text-5xl tracking-[-1px]">
         Top of the arena.
       </NeonText>
-
       <Card>
         {isLoading && (
-          <div className="font-mono text-xs text-[var(--color-text-3)]">
-            loading…
-          </div>
+          <div className="font-mono text-xs text-[var(--color-text-3)]">loading…</div>
         )}
-
         {!isLoading && data && data.length === 0 && (
-          <div className="py-6 text-center font-mono text-xs text-[var(--color-text-3)]">
+          <div className="font-mono text-xs text-[var(--color-text-3)] py-6 text-center">
             No challengers ranked yet.
           </div>
         )}
-
         {data &&
           data.map((r) => {
             const t = tierForElo(r.elo);
-
             return (
               <Link
                 key={r.user_id}
@@ -72,30 +52,21 @@ export default function LeaderboardPage() {
                 <div className="font-display text-2xl font-extrabold text-[var(--color-text-3)]">
                   {r.rank}
                 </div>
-
-                <TierBadge
-                  elo={r.elo}
-                  size="sm"
-                  showDivision={false}
-                />
-
+                <TierBadge elo={r.elo} size="sm" showDivision={false} />
                 <div>
-                  <div className="font-semibold text-[var(--color-text-1)]">
+                  <div className="text-[var(--color-text-1)] font-semibold">
                     {r.username}
                   </div>
-
                   {r.cf_handle && (
                     <div className="font-mono text-[10px] tracking-[0.15em] text-[var(--color-text-3)]">
                       @{r.cf_handle}
                     </div>
                   )}
                 </div>
-
                 <div className="font-mono text-[11px] tracking-[0.2em] text-[var(--color-neon-cyan)]">
                   {t.key}
                 </div>
-
-                <div className="text-right font-mono text-[18px] font-bold text-[var(--color-text-1)]">
+                <div className="font-mono text-[18px] font-bold text-right text-[var(--color-text-1)]">
                   {r.elo}
                 </div>
               </Link>
