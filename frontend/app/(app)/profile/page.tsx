@@ -9,6 +9,7 @@ import { tierForElo, divisionForElo } from "@/lib/tier";
 import { Button } from "@/components/primitives/Button";
 import { EloSparkline } from "@/components/profile/EloSparkline";
 import { RecentDuelsList } from "@/components/profile/RecentDuelsList";
+import { CoachCard } from "@/components/profile/CoachCard";
 
 export default function ProfilePage() {
   const user = useAuth((s) => s.user);
@@ -50,6 +51,8 @@ export default function ProfilePage() {
         <StatTile label="Losses" value={user.duel_losses ?? 0} />
         <StatTile label="XP" value={user.xp ?? 0} />
       </div>
+
+      <CoachCard user={user} />
 
       <Card>
         <div className="font-mono text-[11px] tracking-[0.3em] text-[var(--color-text-3)] uppercase mb-3">
