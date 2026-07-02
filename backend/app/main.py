@@ -1,20 +1,28 @@
 import asyncio
 import json
+import logging
 import os
 import time
+import uuid
 from datetime import datetime
+from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from . import crud, schemas
 from .db import Base, engine, get_db
-from .models import ChatMessage, Duel, DuelParticipant, DuelStep, EloHistory, User
+from .models import ChatMessage, Duel, DuelParticipant, DuelStep, EloHistory, User, UserFocus
 from .schemas import CFProblemsResponse
 from .services.codeforces import CodeforcesService
-from .services.cf_sync import process_duel_cf
+from .services.duel_completion import complete_duel
 from .services.elo import tier_for_elo
 from .services.ws_hub import hub
 from .services.matchmaker import run_matchmaker_loop
@@ -36,9 +44,21 @@ from .api.routes.deck import router as deck_router
 from .api.routes.async_challenge import router as async_challenge_router
 from .api.routes.cosmetics import router as cosmetics_router
 from .api.routes.admin import router as admin_router
+from .api.routes.coach import router as coach_router
+from .services.research_db import check_config as check_research_db_config
 
 # ================= DB INIT =================
 Base.metadata.create_all(bind=engine)
+
+_research_cfg = check_research_db_config()
+if not _research_cfg["configured"]:
+    _research_issues = list(_research_cfg.get("missing", [])) + list(
+        _research_cfg.get("invalid", [])
+    )
+    logger.warning(
+        "Research DB not configured. Env issues: %s. Coach features will return 503.",
+        ", ".join(_research_issues),
+    )
 
 
 def iso_utc(dt):
@@ -100,6 +120,7 @@ app.include_router(deck_router)
 app.include_router(async_challenge_router)
 app.include_router(cosmetics_router)
 app.include_router(admin_router)
+app.include_router(coach_router)
 
 
 # ================= BASIC ENDPOINTS =================
@@ -438,17 +459,24 @@ async def _check_abandoned_duels() -> None:
 async def _track_websocket_usage() -> None:
     """Track WebSocket activity for abandonment detection."""
     while True:
-        current_time = time.time()
-        # Remove entries older than 5 minutes
-        old_keys = [k for k, v in _websocket_last_seen.items() if current_time - v > 300]
-        for k in old_keys:
-            _websocket_last_seen.pop(k, None)
-        
+        try:
+            current_time = time.time()
+            old_keys = [k for k, v in _websocket_last_seen.items() if current_time - v > 300]
+            for k in old_keys:
+                _websocket_last_seen.pop(k, None)
+        except Exception as exc:
+            print(f"Error tracking websocket usage: {exc}")
         await asyncio.sleep(CHECK_INTERVAL)
 
 
 @app.on_event("startup")
 async def _start_workers() -> None:
+    secret_key = os.environ.get("SECRET_KEY")
+    if not secret_key or secret_key == "codearena-dev-secret":
+        print("FATAL: SECRET_KEY environment variable is not set or is using the insecure default")
+        print("Set SECRET_KEY to a cryptographically random string in the environment or .env file")
+        return
+
     try:
         from .services.quests import seed_quests
         db = next(get_db())

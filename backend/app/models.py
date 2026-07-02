@@ -51,6 +51,7 @@ class User(Base):
     chat_messages = relationship("ChatMessage", back_populates="user")
     practice_items = relationship("PracticeSheetItem", back_populates="user", cascade="all, delete-orphan")
     duel_participations = relationship("DuelParticipant", back_populates="user", cascade="all, delete-orphan")
+    focus_progress = relationship("UserFocus", back_populates="user", cascade="all, delete-orphan")
 
 
 class Duel(Base):
@@ -373,3 +374,16 @@ class AsyncChallenge(Base):
     winner_id = Column(String(36), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
+
+
+class UserFocus(Base):
+    __tablename__ = "user_focus"
+    __table_args__ = (UniqueConstraint("user_id", "tag", name="uq_user_focus_tag"),)
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    tag = Column(String(64), nullable=False)
+    practice_count = Column(Integer, default=0, nullable=False)
+    last_practiced_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="focus_progress")

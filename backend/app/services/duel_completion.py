@@ -6,7 +6,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.models import Duel, DuelParticipant, DuelStep, EloHistory, ReplayEvent, User
+from app.models import Duel, DuelParticipant, DuelStep, EloHistory, ReplayEvent, User, UserFocus
 from app.services.elo import elo_delta, apply_delta, tier_for_elo
 from app.services.streak import tick_streak
 from app.services.quests import evaluate_after_duel
@@ -209,7 +209,36 @@ async def complete_duel(
         )
     )
 
+    _track_focus(db, host_user, duel)
+    _track_focus(db, opp_user, duel)
+
     db.commit()
 
     await hub.broadcast("duel", duel.id, {"type": "duel_complete", "payload": payload})
     return payload
+
+
+def _track_focus(db: Session, user: User, duel: Duel) -> None:
+    now = datetime.utcnow()
+    tags_seen: set[str] = set()
+    for step in duel.steps:
+        if not step.problem_tags_json:
+            continue
+        try:
+            tags = json.loads(step.problem_tags_json)
+            if isinstance(tags, list):
+                tags_seen.update(t.lower().strip() for t in tags if isinstance(t, str))
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    for tag in tags_seen:
+        existing = (
+            db.query(UserFocus)
+            .filter(UserFocus.user_id == user.id, UserFocus.tag == tag)
+            .first()
+        )
+        if existing:
+            existing.practice_count += 1
+            existing.last_practiced_at = now
+        else:
+            db.add(UserFocus(user_id=user.id, tag=tag, practice_count=1, last_practiced_at=now))
