@@ -1,12 +1,21 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+
+class ToggleSuspendRequest(BaseModel):
+    suspended: bool = True
 from app.models import (
     AsyncChallenge,
     Duel,
@@ -22,7 +31,6 @@ from app.models import (
     Submission,
     User,
 )
-from app.schemas import UserOut
 from app.api.routes.auth import _get_current_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -61,7 +69,7 @@ def admin_overview(
     total_quests = db.query(func.count(Quest.id)).scalar() or 0
 
     # Users registered in the last 24h
-    since = datetime.utcnow()
+    since = datetime.utcnow() - timedelta(hours=24)
     new_users_24h = (
         db.query(func.count(User.id)).filter(User.created_at >= since).scalar() or 0
     )
@@ -278,11 +286,11 @@ def get_user_detail(
 @router.patch("/users/{user_id}/role")
 def update_user_role(
     user_id: str,
-    body: dict,
+    body: UpdateRoleRequest,
     admin: User = Depends(_require_role("admin", "superadmin")),
     db: Session = Depends(get_db),
 ):
-    new_role = body.get("role", "").strip()
+    new_role = body.role.strip()
     if new_role not in ("user", "moderator", "admin", "superadmin"):
         raise HTTPException(status_code=422, detail="Invalid role")
 
@@ -290,7 +298,6 @@ def update_user_role(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Only superadmin can create superadmins
     if new_role == "superadmin" and admin.role != "superadmin":
         raise HTTPException(status_code=403, detail="Only superadmins can assign superadmin")
 
@@ -302,16 +309,15 @@ def update_user_role(
 @router.patch("/users/{user_id}/suspend")
 def toggle_suspend_user(
     user_id: str,
-    body: dict,
+    body: ToggleSuspendRequest,
     admin: User = Depends(_require_role("moderator", "admin", "superadmin")),
     db: Session = Depends(get_db),
 ):
-    suspended = body.get("suspended", True)
+    suspended = body.suspended
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Moderators cannot suspend admins or superadmins
     if admin.role == "moderator" and user.role in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Cannot suspend higher-privilege users")
 

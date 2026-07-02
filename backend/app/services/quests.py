@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
-from app.models import Duel, DuelStep, EloHistory, Quest, QuestProgress, User
+from app.models import Duel, DuelStep, Quest, QuestProgress, User
 
 
 @dataclass
@@ -131,7 +131,7 @@ def _week_anchor(tz_name: str | None) -> str:
             local = now_utc
     else:
         local = now_utc
-    monday = local - __import__("datetime").timedelta(days=local.weekday())
+    monday = local - timedelta(days=local.weekday())
     return monday.strftime("%Y-%m-%d")
 
 

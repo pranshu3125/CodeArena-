@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Duel, DuelParticipant, DuelStep, FriendRoom, User
-from app.services.problem_picker import pick_ladder
 from app.services.ws_hub import hub
 from app.services.elo import tier_for_elo
 from app.api.routes.auth import _get_current_user
@@ -34,7 +33,7 @@ def _generate_code(db: Session) -> str:
         code = "".join(random.choices(alphabet, k=6))
         if not db.query(FriendRoom).filter(FriendRoom.code == code).first():
             return code
-    raise RuntimeError("could not generate unique room code")
+    raise HTTPException(status_code=500, detail="could not generate unique room code")
 
 
 class CreateRoomRequest(BaseModel):

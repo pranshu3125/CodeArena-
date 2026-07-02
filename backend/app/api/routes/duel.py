@@ -6,6 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import crud
@@ -29,7 +30,7 @@ from app.services.duel_roles import host_and_opponent, is_duel_host
 from app.services.elo import tier_for_elo
 from app.api.routes.auth import _get_current_user
 from app.services.ws_hub import hub
-from app.services.metrics import metrics_response, MetricsMiddleware
+
 
 router = APIRouter(prefix="/duel", tags=["duel"])
 
@@ -603,16 +604,21 @@ def get_chat_messages(
     return {"messages": jsonable_encoder(messages)}
 
 
+class SendChatMessageRequest(BaseModel):
+    user_id: str
+    message: str
+
+
 @router.post("/{duel_id}/chat")
 def send_chat_message(
     duel_id: str,
-    body: dict = Body(...),
+    body: SendChatMessageRequest,
     db: Session = Depends(get_db),
 ):
-    user_id = body.get("user_id")
-    message = body.get("message")
-    if not user_id or not message or not message.strip():
-        raise HTTPException(status_code=400, detail="user_id and message are required")
+    user_id = body.user_id
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
 
     chat_msg = ChatMessage(
         id=str(uuid.uuid4()),

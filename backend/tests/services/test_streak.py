@@ -27,7 +27,7 @@ def _make_user(db, username: str, tz=None) -> User:
     tz = tz or "UTC"
     u = User(username=username, email=None, hashed_password="x", cf_handle=None, timezone=tz, elo=1200)
     db.add(u)
-    db.commit()
+    db.flush()
     db.refresh(u)
     return u
 

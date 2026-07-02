@@ -7,6 +7,9 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
+_PWHASH_PREFIX = "$pbkdf2-sha256$100000$"
+_PWHASH_ITERS = 100_000
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import or_
@@ -14,7 +17,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.db import get_db
-from app.schemas import UserCreate, UserLogin, TokenResponse, UserMe, UserOut
+from app.schemas import UserCreate, UserLogin, TokenResponse, UserOut
 from app.services.codeforces import CodeforcesService, get_user_info, get_user_solved_problems
 from app.services.cf_sync import verify_cf_handle
 from app.models import SolvedProblem, User
@@ -23,7 +26,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer()
 
 TOKEN_EXPIRE_HOURS = 24
-SECRET_KEY = os.getenv("SECRET_KEY", "codearena-dev-secret")
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+
+if not SECRET_KEY or SECRET_KEY == "codearena-dev-secret":
+    import sys
+    print("WARNING: SECRET_KEY is not set or is using the insecure default.", file=sys.stderr)
+    print("Set SECRET_KEY environment variable to a cryptographically random string.", file=sys.stderr)
 
 
 class CFHandleUpdate(BaseModel):
@@ -31,11 +39,18 @@ class CFHandleUpdate(BaseModel):
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    salt = os.urandom(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PWHASH_ITERS)
+    return _PWHASH_PREFIX + base64.b64encode(salt + key).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return hash_password(plain_password) == hashed_password
+    if hashed_password.startswith(_PWHASH_PREFIX):
+        raw = base64.b64decode(hashed_password[len(_PWHASH_PREFIX):].encode("utf-8"))
+        salt, key = raw[:16], raw[16:]
+        expected = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, _PWHASH_ITERS)
+        return hmac.compare_digest(key, expected)
+    return hashlib.sha256(plain_password.encode("utf-8")).hexdigest() == hashed_password
 
 
 def _sign(value: str) -> str:
